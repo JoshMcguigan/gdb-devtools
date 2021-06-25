@@ -1,152 +1,86 @@
-use logos::Lexer;
-
-#[derive(Debug, Clone, Copy, PartialEq, logos::Logos)]
-pub enum TokenType {
-    #[regex(r#"('|")([^('|")\\]|\\t|\\u|\\n|\\("|'))*('|")"#)]
-    String,
-    #[regex(r"[0-9]+")]
-    Integer,
-    #[regex(r"[0-9]+\.+[0-9]+", priority = 2)]
-    Float,
-
-    #[regex(r"[a-zA-Z_]+")]
-    Identifier,
-    #[regex(r"[$][a-zA-Z_]+")]
-    ConvenienceIdentifier,
-
-    #[token("define")]
-    Define,
-
-    #[token("echo")]
-    Echo,
-    #[token("set")]
-    Set,
-
-    #[token("if")]
-    If,
-    #[token("else")]
-    Else,
-
-    #[token("while")]
-    While,
-    #[token("loop_break")]
-    LoopBreak,
-    #[token("loop_continue")]
-    LoopContinue,
-
-    #[token("end")]
-    End,
-
-    #[token("=")]
-    Assignment,
-
-    #[regex(r"#[^(\r\n|\r|\n)]*")]
-    Comment,
-
-    #[regex(r"(\r\n|\r|\n)")]
-    Newline,
-    #[regex(r"[ \t]+")]
-    Whitespace,
-
-    #[error]
-    Error,
-}
-
 #[derive(Debug)]
-enum Statement {
-    /// The `echo` command is treated differently from other functions, because
-    /// the arguments are not evaluated.
-    EchoCall,
-    FunctionDefine {
-        body: Vec<Statement>,
-    },
-    FunctionCall,
+enum Command {
+    // TODO these need to include offsets into file
+    Define { body: Vec<Command> },
+    Other { command: String, args: Vec<String> },
 }
 
-fn parse(mut tokens: impl Iterator<Item = TokenType>) -> Vec<Statement> {
-    let mut tokens = tokens.peekable();
-    let mut out = vec![];
+fn parse(input: &str) -> Vec<Command> {
+    parse_until(&mut input.lines(), false)
+}
 
-    while let Some(token) = tokens.next() {
-        match token {
-            TokenType::Echo => {
-                // For now we aren't doing anything with function call args.
-                let mut _args = vec![];
-                while let Some(token) = tokens.next_if(|&token| token != TokenType::Newline) {
-                    _args.push(token);
-                }
-                out.push(Statement::EchoCall);
+fn parse_until<'a>(input: &mut impl Iterator<Item = &'a str>, until_end: bool) -> Vec<Command> {
+    let mut commands = vec![];
+    while let Some(line) = input.next() {
+        match line.split_whitespace().collect::<Vec<&str>>().as_slice() {
+            ["define", ..] => {
+                let body = parse_until(input, true);
+                commands.push(Command::Define { body });
             }
-            TokenType::Define => {
-                // For now we aren't doing anything with function call args.
-                let mut _args = vec![];
-                while let Some(token) = tokens.next_if(|&token| token != TokenType::Newline) {
-                    _args.push(token);
+            ["end", ..] => {
+                if until_end {
+                    return commands;
                 }
-
-                let mut body = vec![];
-                while let Some(token) = tokens.next_if(|&token| token != TokenType::End) {
-                    body.push(token);
-                }
-
-                out.push(Statement::FunctionDefine {
-                    body: parse(body.into_iter()),
+            }
+            // Ignore empty lines
+            [] => {}
+            [command, args @ ..] => {
+                commands.push(Command::Other {
+                    command: command.to_string(),
+                    args: args.into_iter().map(|s| s.to_string()).collect(),
                 });
             }
-            TokenType::Identifier => {
-                // For now we aren't doing anything with function call args.
-                let mut _args = vec![];
-                while let Some(token) = tokens.next_if(|&token| token != TokenType::Newline) {
-                    _args.push(token);
-                }
-
-                out.push(Statement::FunctionCall);
-            }
-            TokenType::Whitespace => {
-                // For now whitespace is not represented in the syntax tree.
-            }
-            // For now drop all other tokens, but eventually these should all
-            // be handled.
-            _ => {}
-        };
+        }
     }
 
-    out
+    commands
 }
 
 #[cfg(test)]
 mod tests {
     use expect_test::{expect, Expect};
-    use logos::Logos;
 
-    use super::{parse, TokenType};
+    use super::parse;
 
-    fn check_lex_and_parse(input: &str, expect_lex: Expect, expect_parse: Expect) {
-        let mut out_lex = String::new();
-
-        let mut lexer = TokenType::lexer(input);
-        let lexer_clone = lexer.clone();
-
-        while let Some(token_type) = lexer.next() {
-            let slice = match lexer.slice() {
-                "\n" => "\\n",
-                "\t" => "\\t",
-                // Render any slice of all whitespace as a single space
-                // character between single quotes.
-                slice if slice.trim_start().is_empty() => "' '",
-                slice => slice,
-            };
-            out_lex += &format!("{:?} {:?} {}\n", token_type, lexer.span(), slice);
-        }
-
-        expect_lex.assert_eq(&out_lex);
-
+    fn check_lex_and_parse(input: &str, expect_parse: Expect) {
         expect_parse.assert_eq(
-            &parse(lexer_clone)
+            &parse(input)
                 .into_iter()
-                .map(|s| format!("{:?}\n", s))
+                .map(|s| format!("{:#?}\n", s))
                 .collect::<Vec<String>>()
                 .join(""),
+        );
+    }
+
+    #[test]
+    fn commands() {
+        let script = r#"
+command_with_no_args
+command_with_one_arg foo
+command_with_two_args foo bar
+        "#;
+
+        check_lex_and_parse(
+            script,
+            expect![[r#"
+                Other {
+                    command: "command_with_no_args",
+                    args: [],
+                }
+                Other {
+                    command: "command_with_one_arg",
+                    args: [
+                        "foo",
+                    ],
+                }
+                Other {
+                    command: "command_with_two_args",
+                    args: [
+                        "foo",
+                        "bar",
+                    ],
+                }
+            "#]],
         );
     }
 
@@ -161,22 +95,16 @@ end
         check_lex_and_parse(
             script,
             expect![[r#"
-                Newline 0..1 \n
-                Define 1..7 define
-                Whitespace 7..8 ' '
-                Identifier 8..14 say_hi
-                Newline 14..15 \n
-                Whitespace 15..19 ' '
-                Echo 19..23 echo
-                Whitespace 23..24 ' '
-                Identifier 24..26 hi
-                Newline 26..27 \n
-                End 27..30 end
-                Newline 30..31 \n
-                Whitespace 31..39 ' '
-            "#]],
-            expect![[r#"
-                FunctionDefine { body: [EchoCall] }
+                Define {
+                    body: [
+                        Other {
+                            command: "echo",
+                            args: [
+                                "hi",
+                            ],
+                        },
+                    ],
+                }
             "#]],
         );
     }
