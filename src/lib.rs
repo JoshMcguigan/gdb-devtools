@@ -14,35 +14,47 @@ struct Line<'a> {
 }
 
 #[derive(Debug)]
-enum Command {
-    // TODO these need to include offsets into file
-    Define { body: Vec<Command> },
-    Other { command: String, args: Vec<String> },
+enum Command<'a> {
+    Define {
+        define: Token<'a>,
+        body: Vec<Command<'a>>,
+    },
+    Other {
+        command: Token<'a>,
+        args: Vec<Token<'a>>,
+    },
 }
 
 fn parse(input: &str) -> Vec<Command> {
-    parse_until(&mut input.lines(), false)
+    parse_until(&mut iters::lines(input).into_iter(), false)
 }
 
-fn parse_until<'a>(input: &mut impl Iterator<Item = &'a str>, until_end: bool) -> Vec<Command> {
+fn parse_until<'a>(
+    input: &mut impl Iterator<Item = Line<'a>>,
+    until_end: bool,
+) -> Vec<Command<'a>> {
     let mut commands = vec![];
     while let Some(line) = input.next() {
-        match line.split_whitespace().collect::<Vec<&str>>().as_slice() {
-            ["define", ..] => {
+        let mut tokens = iters::tokens(&line);
+        match tokens.first().map(|t| t.text) {
+            Some("define") => {
                 let body = parse_until(input, true);
-                commands.push(Command::Define { body });
+                commands.push(Command::Define {
+                    define: tokens.remove(0),
+                    body,
+                });
             }
-            ["end", ..] => {
+            Some("end") => {
                 if until_end {
                     return commands;
                 }
             }
             // Ignore empty lines
-            [] => {}
-            [command, args @ ..] => {
+            None => {}
+            Some(command) => {
                 commands.push(Command::Other {
-                    command: command.to_string(),
-                    args: args.into_iter().map(|s| s.to_string()).collect(),
+                    command: tokens.remove(0),
+                    args: tokens,
                 });
             }
         }
@@ -79,20 +91,38 @@ command_with_two_args foo bar
             script,
             expect![[r#"
                 Other {
-                    command: "command_with_no_args",
+                    command: Token {
+                        text: "command_with_no_args",
+                        span: 1..21,
+                    },
                     args: [],
                 }
                 Other {
-                    command: "command_with_one_arg",
+                    command: Token {
+                        text: "command_with_one_arg",
+                        span: 22..42,
+                    },
                     args: [
-                        "foo",
+                        Token {
+                            text: "foo",
+                            span: 43..46,
+                        },
                     ],
                 }
                 Other {
-                    command: "command_with_two_args",
+                    command: Token {
+                        text: "command_with_two_args",
+                        span: 47..68,
+                    },
                     args: [
-                        "foo",
-                        "bar",
+                        Token {
+                            text: "foo",
+                            span: 69..72,
+                        },
+                        Token {
+                            text: "bar",
+                            span: 73..76,
+                        },
                     ],
                 }
             "#]],
@@ -111,11 +141,21 @@ end
             script,
             expect![[r#"
                 Define {
+                    define: Token {
+                        text: "define",
+                        span: 1..7,
+                    },
                     body: [
                         Other {
-                            command: "echo",
+                            command: Token {
+                                text: "echo",
+                                span: 19..23,
+                            },
                             args: [
-                                "hi",
+                                Token {
+                                    text: "hi",
+                                    span: 24..26,
+                                },
                             ],
                         },
                     ],
