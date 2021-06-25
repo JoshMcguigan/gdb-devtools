@@ -1,3 +1,18 @@
+use std::ops::Range;
+
+mod iters;
+
+#[derive(Debug)]
+struct Token<'a> {
+    text: &'a str,
+    span: Range<usize>,
+}
+
+struct Line<'a> {
+    text: &'a str,
+    span: Range<usize>,
+}
+
 #[derive(Debug)]
 enum Command {
     // TODO these need to include offsets into file
