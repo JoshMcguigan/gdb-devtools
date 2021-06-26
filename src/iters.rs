@@ -1,34 +1,36 @@
-use super::{Line, Token};
+use super::{CommandLine, Location, Token};
 
-pub(crate) fn lines(text: &str) -> Vec<Line> {
+pub(crate) fn lines(text: &str) -> Vec<CommandLine> {
     let mut lines = vec![];
 
     let mut span_start = 0;
+    let mut line_number = 0;
 
     for (index, character) in text.char_indices() {
         if character == '\n' {
             let span = span_start..index + 1;
-            lines.push(Line {
+            lines.push(CommandLine {
                 text: &text[span.clone()],
-                span,
+                start_line_in_file: line_number,
             });
 
             span_start = index + 1;
+            line_number += 1;
         }
     }
 
     if span_start < text.len() {
         let span = span_start..text.len();
-        lines.push(Line {
+        lines.push(CommandLine {
             text: &text[span.clone()],
-            span,
+            start_line_in_file: line_number,
         });
     }
 
     lines
 }
 
-pub(crate) fn tokens<'a, 'line>(line: &'a Line<'line>) -> Vec<Token<'line>> {
+pub(crate) fn tokens<'a, 'line>(line: &'a CommandLine<'line>) -> Vec<Token<'line>> {
     let mut tokens = vec![];
 
     let mut span_start = match line.text.find(|c: char| !c.is_whitespace()) {
@@ -45,11 +47,12 @@ pub(crate) fn tokens<'a, 'line>(line: &'a Line<'line>) -> Vec<Token<'line>> {
         if character.is_whitespace() {
             if !currently_in_whitespace {
                 let span_in_line = span_start..index;
-                let span_in_file =
-                    (span_in_line.start + line.span.start)..(span_in_line.end + line.span.start);
                 tokens.push(Token {
                     text: &line.text[span_in_line],
-                    span: span_in_file,
+                    location_in_file: Location {
+                        line: line.start_line_in_file,
+                        column: span_start,
+                    },
                 });
             }
 
@@ -63,11 +66,12 @@ pub(crate) fn tokens<'a, 'line>(line: &'a Line<'line>) -> Vec<Token<'line>> {
     }
     if !currently_in_whitespace {
         let span_in_line = span_start..line.text.len();
-        let span_in_file =
-            (span_in_line.start + line.span.start)..(span_in_line.end + line.span.start);
         tokens.push(Token {
             text: &line.text[span_in_line],
-            span: span_in_file,
+            location_in_file: Location {
+                line: line.start_line_in_file,
+                column: span_start,
+            },
         });
     }
 
@@ -107,37 +111,58 @@ command_with_two_args foo bar
                 [
                     Token {
                         text: "command_with_no_args",
-                        span: 1..21,
+                        location_in_file: Location {
+                            line: 1,
+                            column: 0,
+                        },
                     },
                 ]
                 [
                     Token {
                         text: "command_with_one_arg",
-                        span: 22..42,
+                        location_in_file: Location {
+                            line: 2,
+                            column: 0,
+                        },
                     },
                     Token {
                         text: "foo",
-                        span: 43..46,
+                        location_in_file: Location {
+                            line: 2,
+                            column: 21,
+                        },
                     },
                 ]
                 [
                     Token {
                         text: "command_with_two_args",
-                        span: 47..68,
+                        location_in_file: Location {
+                            line: 3,
+                            column: 0,
+                        },
                     },
                     Token {
                         text: "foo",
-                        span: 69..72,
+                        location_in_file: Location {
+                            line: 3,
+                            column: 22,
+                        },
                     },
                     Token {
                         text: "bar",
-                        span: 73..76,
+                        location_in_file: Location {
+                            line: 3,
+                            column: 26,
+                        },
                     },
                 ]
                 [
                     Token {
                         text: "leading_space",
-                        span: 78..91,
+                        location_in_file: Location {
+                            line: 4,
+                            column: 1,
+                        },
                     },
                 ]
                 []
@@ -152,13 +177,16 @@ command_with_two_args foo bar
         check_lines_and_tokens(
             script,
             expect![[r#"
-            [
-                Token {
-                    text: "command_with_no_args",
-                    span: 0..20,
-                },
-            ]
-        "#]],
+                [
+                    Token {
+                        text: "command_with_no_args",
+                        location_in_file: Location {
+                            line: 0,
+                            column: 0,
+                        },
+                    },
+                ]
+            "#]],
         );
     }
 }
