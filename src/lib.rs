@@ -27,6 +27,9 @@ struct CommandLine<'a> {
 enum Command<'a> {
     Define {
         define: Token<'a>,
+        // TODO how to note something which is optional in the grammar vs something
+        // which is optional because the user hasn't entered it yet (or made a mistake)
+        identifier: Option<Token<'a>>,
         body: Vec<Command<'a>>,
         // TODO get end token - should be optional in case
         // it hasn't been written yet
@@ -55,6 +58,11 @@ fn parse_until<'a>(
                 let body = parse_until(input, true);
                 commands.push(Command::Define {
                     define: tokens.remove(0),
+                    identifier: if tokens.is_empty() {
+                        None
+                    } else {
+                        Some(tokens.remove(0))
+                    },
                     body,
                 });
             }
@@ -180,6 +188,15 @@ end
                             column: 0,
                         },
                     },
+                    identifier: Some(
+                        Token {
+                            text: "say_hi",
+                            location_in_file: Location {
+                                line: 1,
+                                column: 7,
+                            },
+                        },
+                    ),
                     body: [
                         Other {
                             command: Token {
