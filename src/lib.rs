@@ -31,10 +31,9 @@ enum Command<'a> {
         // which is optional because the user hasn't entered it yet (or made a mistake)
         identifier: Option<Token<'a>>,
         body: Vec<Command<'a>>,
-        // TODO get end token - should be optional in case
-        // it hasn't been written yet
-        //
-        // also add ability to track unexpected tokens and add tests for this
+        end: Option<Token<'a>>,
+        // TODO
+        // add ability to track unexpected tokens and add tests for this
     },
     Other {
         command: Token<'a>,
@@ -43,19 +42,26 @@ enum Command<'a> {
 }
 
 fn parse(input: &str) -> Vec<Command> {
-    parse_until(&mut iters::lines(input).into_iter(), false)
+    parse_until(&mut iters::lines(input).into_iter(), false).0
 }
 
+// TODO clean up this function signature
+//
+// it is really two functions, the Option<CommandLine> is always None
+// if until_end is false
+//
+// if until_end is true, it is Some assuming the script is well
+// formed (not missing an end)
 fn parse_until<'a>(
     input: &mut impl Iterator<Item = CommandLine<'a>>,
     until_end: bool,
-) -> Vec<Command<'a>> {
+) -> (Vec<Command<'a>>, Option<CommandLine<'a>>) {
     let mut commands = vec![];
     while let Some(line) = input.next() {
         let mut tokens = iters::tokens(&line);
         match tokens.first().map(|t| t.text) {
             Some("define") => {
-                let body = parse_until(input, true);
+                let (body, end_line) = parse_until(input, true);
                 commands.push(Command::Define {
                     define: tokens.remove(0),
                     identifier: if tokens.is_empty() {
@@ -64,11 +70,12 @@ fn parse_until<'a>(
                         Some(tokens.remove(0))
                     },
                     body,
+                    end: end_line.map(|command_line| iters::tokens(&command_line).remove(0)),
                 });
             }
             Some("end") => {
                 if until_end {
-                    return commands;
+                    return (commands, Some(line));
                 }
             }
             // Ignore empty lines
@@ -82,7 +89,7 @@ fn parse_until<'a>(
         }
     }
 
-    commands
+    (commands, None)
 }
 
 #[cfg(test)]
@@ -217,6 +224,15 @@ end
                             ],
                         },
                     ],
+                    end: Some(
+                        Token {
+                            text: "end",
+                            location_in_file: Location {
+                                line: 3,
+                                column: 0,
+                            },
+                        },
+                    ),
                 }
             "#]],
         );
