@@ -5,9 +5,10 @@ pub(crate) fn lines(text: &str) -> Vec<CommandLine> {
 
     let mut span_start = 0;
     let mut line_number = 0;
+    let mut escaped = false;
 
     for (index, character) in text.char_indices() {
-        if character == '\n' {
+        if character == '\n' && !escaped {
             let span = span_start..index + 1;
             lines.push(CommandLine {
                 text: &text[span.clone()],
@@ -16,6 +17,12 @@ pub(crate) fn lines(text: &str) -> Vec<CommandLine> {
 
             span_start = index + 1;
             line_number += 1;
+        }
+
+        if character == '\\' {
+            escaped = true;
+        } else {
+            escaped = false;
         }
     }
 
@@ -38,20 +45,31 @@ pub(crate) fn tokens<'a, 'line>(line: &'a CommandLine<'line>) -> Vec<Token<'line
         None => return tokens,
     };
     let mut currently_in_whitespace = false;
+    let mut escaped = false;
+    let mut line_start_column = 0;
+    let mut line_number = 0;
 
     for (index, character) in line
         .text
         .char_indices()
         .skip_while(|(_, c)| c.is_whitespace())
     {
+        if character == '\n' && escaped {
+            escaped = false;
+            currently_in_whitespace = true;
+            line_start_column = index + 1;
+            line_number += 1;
+            continue;
+        }
+
         if character.is_whitespace() {
             if !currently_in_whitespace {
                 let span_in_line = span_start..index;
                 tokens.push(Token {
                     text: &line.text[span_in_line],
                     location_in_file: Location {
-                        line: line.start_line_in_file,
-                        column: span_start,
+                        line: line.start_line_in_file + line_number,
+                        column: span_start - line_start_column,
                     },
                 });
             }
@@ -63,14 +81,20 @@ pub(crate) fn tokens<'a, 'line>(line: &'a CommandLine<'line>) -> Vec<Token<'line
                 span_start = index;
             }
         }
+
+        if character == '\\' {
+            escaped = true;
+        } else {
+            escaped = false;
+        }
     }
     if !currently_in_whitespace {
         let span_in_line = span_start..line.text.len();
         tokens.push(Token {
             text: &line.text[span_in_line],
             location_in_file: Location {
-                line: line.start_line_in_file,
-                column: span_start,
+                line: line.start_line_in_file + line_number,
+                column: span_start - line_start_column,
             },
         });
     }
@@ -186,6 +210,38 @@ command_with_two_args foo bar
                         },
                     },
                 ]
+            "#]],
+        );
+    }
+
+    #[test]
+    fn lines_and_tokens_escaped_newline() {
+        let script = r#"
+command_with_one_arg \
+    foo
+        "#;
+
+        check_lines_and_tokens(
+            script,
+            expect![[r#"
+                []
+                [
+                    Token {
+                        text: "command_with_one_arg",
+                        location_in_file: Location {
+                            line: 1,
+                            column: 0,
+                        },
+                    },
+                    Token {
+                        text: "foo",
+                        location_in_file: Location {
+                            line: 2,
+                            column: 4,
+                        },
+                    },
+                ]
+                []
             "#]],
         );
     }
