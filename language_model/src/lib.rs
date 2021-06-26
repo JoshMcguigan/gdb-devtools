@@ -1,7 +1,7 @@
 mod iters;
 
 #[derive(Debug)]
-struct Token<'a> {
+pub struct Token<'a> {
     text: &'a str,
     /// Location of the start of this token in the file. Tokens cannot contain
     /// newlines, so to find the end you can add the text length to the column.
@@ -9,7 +9,7 @@ struct Token<'a> {
 }
 
 #[derive(Debug)]
-struct Location {
+pub struct Location {
     line: usize,
     column: usize,
 }
@@ -24,7 +24,7 @@ struct CommandLine<'a> {
 }
 
 #[derive(Debug)]
-enum Command<'a> {
+pub enum Command<'a> {
     Define {
         define: Token<'a>,
         // TODO how to note something which is optional in the grammar vs something
@@ -41,7 +41,7 @@ enum Command<'a> {
     },
 }
 
-fn parse(input: &str) -> Vec<Command> {
+pub fn parse(input: &str) -> Vec<Command> {
     parse_until(&mut iters::lines(input).into_iter(), false).0
 }
 
@@ -80,7 +80,7 @@ fn parse_until<'a>(
             }
             // Ignore empty lines
             None => {}
-            Some(command) => {
+            Some(_command) => {
                 commands.push(Command::Other {
                     command: tokens.remove(0),
                     args: tokens,
