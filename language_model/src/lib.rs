@@ -59,33 +59,35 @@ fn parse_until<'a>(
     let mut commands = vec![];
     while let Some(line) = input.next() {
         let mut tokens = iters::tokens(&line);
-        match tokens.first().map(|t| t.text) {
-            Some("define") => {
+        match tokens.next() {
+            Some(define_token @ Token { text: "define", .. }) => {
                 let (body, end_line) = parse_until(input, true);
                 commands.push(Command::Define {
-                    define: tokens.remove(0),
-                    identifier: if tokens.is_empty() {
-                        None
-                    } else {
-                        Some(tokens.remove(0))
-                    },
+                    define: define_token,
+                    identifier: tokens.next(),
                     body,
-                    end: end_line.map(|command_line| iters::tokens(&command_line).remove(0)),
+                    // This unwrap is safe because parse_until until_end only returns a
+                    // command line if that command line has at least one token and
+                    // that token is `end`.
+                    //
+                    // TODO this should be removed when parse_until is reworked as
+                    // described in the todo above.
+                    end: end_line.map(|command_line| iters::tokens(&command_line).next().unwrap()),
                 });
             }
-            Some("end") => {
+            Some(Token { text: "end", .. }) => {
                 if until_end {
                     return (commands, Some(line));
                 }
             }
-            // Ignore empty lines
-            None => {}
-            Some(_command) => {
+            Some(command) => {
                 commands.push(Command::Other {
-                    command: tokens.remove(0),
-                    args: tokens,
+                    command,
+                    args: tokens.collect(),
                 });
             }
+            // Ignore empty lines
+            None => {}
         }
     }
 

@@ -1,6 +1,6 @@
 use super::{CommandLine, Location, Token};
 
-pub(crate) fn lines(text: &str) -> Vec<CommandLine> {
+pub(crate) fn lines(text: &str) -> impl Iterator<Item = CommandLine> {
     let mut lines = vec![];
 
     let mut span_start = 0;
@@ -34,15 +34,17 @@ pub(crate) fn lines(text: &str) -> Vec<CommandLine> {
         });
     }
 
-    lines
+    lines.into_iter()
 }
 
-pub(crate) fn tokens<'a, 'line>(line: &'a CommandLine<'line>) -> Vec<Token<'line>> {
+pub(crate) fn tokens<'a, 'line>(
+    line: &'a CommandLine<'line>,
+) -> impl Iterator<Item = Token<'line>> {
     let mut tokens = vec![];
 
     let mut span_start = match line.text.find(|c: char| !c.is_whitespace()) {
         Some(offset) => offset,
-        None => return tokens,
+        None => return tokens.into_iter(),
     };
     let mut currently_in_whitespace = false;
     let mut escaped = false;
@@ -99,7 +101,7 @@ pub(crate) fn tokens<'a, 'line>(line: &'a CommandLine<'line>) -> Vec<Token<'line
         });
     }
 
-    tokens
+    tokens.into_iter()
 }
 
 #[cfg(test)]
@@ -108,12 +110,14 @@ mod tests {
 
     use super::{lines, tokens};
 
+    use crate::Token;
+
     fn check_lines_and_tokens(input: &str, expect_parse: Expect) {
         expect_parse.assert_eq(
             &lines(input)
                 .into_iter()
                 .map(|line| tokens(&line))
-                .map(|s| format!("{:#?}\n", s))
+                .map(|s| format!("{:#?}\n", s.collect::<Vec<Token>>()))
                 .collect::<Vec<String>>()
                 .join(""),
         );
