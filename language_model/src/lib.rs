@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 mod parse;
 
@@ -28,6 +31,16 @@ impl Semantics {
         // check for unresolved paths
         vec![]
     }
+
+    pub fn find_definition(&self, item: FilePosition) -> Option<FilePosition> {
+        None
+    }
 }
 
 type UnresolvedPaths = Vec<PathBuf>;
+
+pub struct FilePosition<'a> {
+    pub file: &'a Path,
+    pub line: usize,
+    pub column: usize,
+}

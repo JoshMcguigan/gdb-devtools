@@ -5,6 +5,8 @@ authors = ["Josh Mcguigan"]
 edition = "2018"
 
 [dependencies]
+language_model = { path = "../language_model" }
+
 lsp-server = "0.5"
 lsp-types = "0.89"
 serde = "1.0"

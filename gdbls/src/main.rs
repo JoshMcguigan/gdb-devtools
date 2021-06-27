@@ -1,11 +1,12 @@
-use std::error::Error;
+use language_model::{FilePosition, Semantics};
 
+use std::{env, error::Error};
+
+use lsp_server::{Connection, Message, RequestId, Response};
 use lsp_types::{
     notification, request, GotoDefinitionResponse, InitializeParams, OneOf, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-
-use lsp_server::{Connection, Message, RequestId, Response};
 
 fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
     eprintln!("starting generic LSP server");
@@ -35,6 +36,9 @@ fn main_loop(
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
     let _params: InitializeParams = serde_json::from_value(params).unwrap();
     eprintln!("starting main loop");
+
+    let mut semantics = Semantics::new(env::current_dir()?);
+
     for msg in &connection.receiver {
         match msg {
             Message::Request(req) => {
@@ -46,11 +50,40 @@ fn main_loop(
 
                 if let Ok((id, params)) = cast_request::<request::GotoDefinition>(req) {
                     eprintln!("got GotoDefinition request #{}: {:?}", id, params);
-                    let result = Some(GotoDefinitionResponse::Array(Vec::new()));
-                    let result = serde_json::to_value(&result).unwrap();
+                    let result = match semantics.find_definition(FilePosition {
+                        file: &params
+                            .text_document_position_params
+                            .text_document
+                            .uri
+                            .to_file_path()
+                            .unwrap(),
+                        line: params.text_document_position_params.position.line as usize,
+                        column: params.text_document_position_params.position.character as usize,
+                    }) {
+                        Some(definition_position) => {
+                            let pos = lsp_types::Position {
+                                line: definition_position.line as u32,
+                                character: definition_position.column as u32,
+                            };
+                            // We are using an empty range here to indicate a specific
+                            // location.
+                            let range = lsp_types::Range {
+                                start: pos,
+                                end: pos,
+                            };
+                            let result =
+                                Some(GotoDefinitionResponse::from(lsp_types::Location::new(
+                                    lsp_types::Url::from_file_path(definition_position.file)
+                                        .unwrap(),
+                                    range,
+                                )));
+                            Some(serde_json::to_value(&result).unwrap())
+                        }
+                        None => None,
+                    };
                     let resp = Response {
                         id,
-                        result: Some(result),
+                        result,
                         error: None,
                     };
                     connection.sender.send(Message::Response(resp))?;
@@ -64,6 +97,12 @@ fn main_loop(
 
                 if let Ok(params) = cast_notification::<notification::DidOpenTextDocument>(not) {
                     eprintln!("got DidOpenTextDocument notification: {:?}", params);
+                    semantics.set_file_text(
+                        // This unwrap fails if using file URIs which are not
+                        // file: scheme.
+                        params.text_document.uri.to_file_path().unwrap(),
+                        params.text_document.text,
+                    );
                 };
             }
         }
