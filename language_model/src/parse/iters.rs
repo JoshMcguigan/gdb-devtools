@@ -108,9 +108,7 @@ pub(crate) fn tokens<'a, 'line>(
 mod tests {
     use expect_test::{expect, Expect};
 
-    use super::{lines, tokens};
-
-    use crate::Token;
+    use super::{lines, tokens, Token};
 
     fn check_lines_and_tokens(input: &str, expect_parse: Expect) {
         expect_parse.assert_eq(
