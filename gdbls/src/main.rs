@@ -60,12 +60,10 @@ fn main_loop(
                 eprintln!("got response: {:?}", resp);
             }
             Message::Notification(not) => {
-                eprintln!("got notification: {:?}", not);
+                eprintln!("got notification: {:#?}", not);
 
-                if let Ok((id, params)) =
-                    cast_notification::<notification::DidOpenTextDocument>(not)
-                {
-                    eprintln!("got DidOpenTextDocument notification #{}: {:?}", id, params);
+                if let Ok(params) = cast_notification::<notification::DidOpenTextDocument>(not) {
+                    eprintln!("got DidOpenTextDocument notification: {:?}", params);
                 };
             }
         }
@@ -83,7 +81,7 @@ where
 
 fn cast_notification<N>(
     notification: lsp_server::Notification,
-) -> Result<(RequestId, N::Params), lsp_server::Notification>
+) -> Result<N::Params, lsp_server::Notification>
 where
     N: notification::Notification,
     N::Params: serde::de::DeserializeOwned,
