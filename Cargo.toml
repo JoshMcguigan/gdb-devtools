@@ -1,2 +1,2 @@
 [workspace]
-members = ["language_model"]
+members = ["gdbls", "language_model"]
