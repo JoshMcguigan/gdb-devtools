@@ -1,17 +1,38 @@
-mod iters;
+use crate::FilePosition;
+
+pub mod iters;
 
 #[derive(Debug)]
 pub(crate) struct Token<'a> {
-    text: &'a str,
+    pub text: &'a str,
     /// Location of the start of this token in the file. Tokens cannot contain
     /// newlines, so to find the end you can add the text length to the column.
-    location_in_file: Location,
+    pub location_in_file: Location,
+}
+
+impl<'a> Token<'a> {
+    pub(crate) fn is_at_location(&self, location: impl Into<Location>) -> bool {
+        let location_to_check: Location = location.into();
+
+        location_to_check.line == self.location_in_file.line
+            && location_to_check.column >= self.location_in_file.column
+            && location_to_check.column < self.location_in_file.column + self.text.len()
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct Location {
-    line: usize,
-    column: usize,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl<'a> From<FilePosition<'a>> for Location {
+    fn from(p: FilePosition) -> Self {
+        Self {
+            line: p.line,
+            column: p.column,
+        }
+    }
 }
 
 /// Represents a single GDB command line, which is one or more
@@ -19,7 +40,7 @@ pub(crate) struct Location {
 pub(crate) struct CommandLine<'a> {
     text: &'a str,
     /// The line in the file where this command line starts.
-    start_line_in_file: usize,
+    pub start_line_in_file: usize,
     // TODO maybe add num_lines?
 }
 
