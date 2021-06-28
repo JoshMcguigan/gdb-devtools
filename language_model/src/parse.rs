@@ -56,6 +56,10 @@ pub(crate) enum Command<'a> {
         // TODO
         // add ability to track unexpected tokens and add tests for this
     },
+    Source {
+        source: Token<'a>,
+        file_path: Option<Token<'a>>,
+    },
     Other {
         command: Token<'a>,
         args: Vec<Token<'a>>,
@@ -100,6 +104,12 @@ fn parse_until<'a>(
                 if until_end {
                     return (commands, Some(line));
                 }
+            }
+            Some(source_token @ Token { text: "source", .. }) => {
+                commands.push(Command::Source {
+                    source: source_token,
+                    file_path: tokens.next(),
+                });
             }
             Some(command) => {
                 commands.push(Command::Other {

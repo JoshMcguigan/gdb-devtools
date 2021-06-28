@@ -33,7 +33,10 @@ impl Semantics {
         vec![]
     }
 
-    pub fn find_definition<'a>(&self, item_position: FilePosition<'a>) -> Option<FilePosition<'a>> {
+    // TODO
+    // this should return full CommandDefine struct, so we could impl
+    // hover using it
+    pub fn find_definition(&self, item_position: FilePosition) -> Option<FilePosition> {
         let script = self.files.get(item_position.file)?;
 
         // Find the token at the requested position.
@@ -44,28 +47,51 @@ impl Semantics {
         let identifier = token.text;
 
         // Find most recent definition of that token before the requested position.
-        parse(script).into_iter().rev().find_map(|command| {
-            if let Command::Define {
-                define: define_command,
-                identifier: Some(defined_identifier),
-                ..
-            } = command
-            {
-                if defined_identifier.text == identifier
-                    && define_command.location_in_file.line < item_position.line
-                {
-                    Some(FilePosition {
-                        file: item_position.file,
-                        line: defined_identifier.location_in_file.line,
-                        column: defined_identifier.location_in_file.column,
-                    })
-                } else {
-                    None
+        self.find_definition_in(item_position.file, identifier, Some(item_position.line))
+    }
+
+    /// Find the definition of the given identifier in the given script, including
+    /// traversing `source` imports.
+    ///
+    /// If a line limit is given, the definition must happen above the given line. This
+    /// is useful to ensure the definition isn't below the usage.
+    fn find_definition_in(
+        &self,
+        script_path: &Path,
+        identifier: &str,
+        line_limit: Option<usize>,
+    ) -> Option<FilePosition> {
+        let (file_path, script) = self.files.get_key_value(script_path)?;
+        parse(script)
+            .into_iter()
+            .rev()
+            .find_map(|command| match command {
+                Command::Define {
+                    define: define_command,
+                    identifier: Some(defined_identifier),
+                    ..
+                } => {
+                    if defined_identifier.text == identifier {
+                        if let Some(line_limit) = line_limit {
+                            if define_command.location_in_file.line >= line_limit {
+                                return None;
+                            }
+                        }
+                        Some(FilePosition {
+                            file: file_path,
+                            line: defined_identifier.location_in_file.line,
+                            column: defined_identifier.location_in_file.column,
+                        })
+                    } else {
+                        None
+                    }
                 }
-            } else {
-                None
-            }
-        })
+                Command::Source {
+                    file_path: Some(file_path),
+                    ..
+                } => self.find_definition_in(&PathBuf::from(file_path.text), identifier, None),
+                _ => None,
+            })
     }
 }
 
@@ -183,6 +209,45 @@ say_hi
 
         assert_eq!(script_path, definition.file);
         assert_eq!(5, definition.line);
+        assert_eq!(7, definition.column);
+    }
+
+    #[test]
+    fn find_definition_from_other_file() {
+        let script_1 = r#"
+source hello.gdb
+
+say_hi
+        "#;
+        let script_1_path = PathBuf::from("foo.gdb");
+        let script_2 = r#"
+define say_hi
+    echo hi
+end
+        "#;
+        let script_2_path = PathBuf::from("hello.gdb");
+
+        let semantics = {
+            let fake_cwd: PathBuf = PathBuf::new();
+            let mut semantics = Semantics::new(fake_cwd);
+            semantics.set_file_text(script_1_path.clone(), script_1.to_owned());
+            semantics.set_file_text(script_2_path.clone(), script_2.to_owned());
+
+            semantics
+        };
+
+        let item_position = FilePosition {
+            file: &script_1_path,
+            line: 3,
+            column: 0,
+        };
+
+        let definition = semantics
+            .find_definition(item_position)
+            .expect("should find definition");
+
+        assert_eq!(script_2_path, definition.file);
+        assert_eq!(1, definition.line);
         assert_eq!(7, definition.column);
     }
 }
