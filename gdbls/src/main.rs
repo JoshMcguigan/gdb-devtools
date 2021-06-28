@@ -1,6 +1,6 @@
 use language_model::{FilePosition, Semantics};
 
-use std::{env, error::Error};
+use std::{env, error::Error, fs, path::PathBuf};
 
 use lsp_server::{Connection, Message, RequestId, Response};
 use lsp_types::{
@@ -81,6 +81,10 @@ fn main_loop(
                         }
                         None => None,
                     };
+                    // TODO we must always return either a result or an error
+                    //
+                    // If we don't find the definition, is that supposed to be
+                    // represented as an empty result or as an error?
                     let resp = Response {
                         id,
                         result,
@@ -97,7 +101,8 @@ fn main_loop(
 
                 if let Ok(params) = cast_notification::<notification::DidOpenTextDocument>(not) {
                     eprintln!("got DidOpenTextDocument notification: {:?}", params);
-                    semantics.set_file_text(
+                    recursively_set_file_text(
+                        &mut semantics,
                         // This unwrap fails if using file URIs which are not
                         // file: scheme.
                         params.text_document.uri.to_file_path().unwrap(),
@@ -108,6 +113,16 @@ fn main_loop(
         }
     }
     Ok(())
+}
+
+fn recursively_set_file_text(semantics: &mut Semantics, path: PathBuf, text: String) {
+    let unresolved_paths = semantics.set_file_text(path, text);
+
+    for path in unresolved_paths.into_iter() {
+        if let Ok(text) = fs::read_to_string(&path) {
+            recursively_set_file_text(semantics, path, text);
+        }
+    }
 }
 
 fn cast_request<R>(req: lsp_server::Request) -> Result<(RequestId, R::Params), lsp_server::Request>

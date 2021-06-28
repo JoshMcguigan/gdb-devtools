@@ -25,6 +25,8 @@ impl Semantics {
     /// Sets the text content for a given file path. If the file `source`s any
     /// external files which are not already loaded, those paths are returned
     /// as UnresolvedPaths.
+    ///
+    /// The path must be an absolute path.
     pub fn set_file_text(&mut self, path: PathBuf, text: String) -> UnresolvedPaths {
         let unresolved_paths = parse(&text)
             .into_iter()
@@ -39,7 +41,9 @@ impl Semantics {
                     if self.files.contains_key(&path) {
                         None
                     } else {
-                        Some(PathBuf::from(file_path.text))
+                        let path = self.canonicalize_path(PathBuf::from(file_path.text));
+
+                        Some(path)
                     }
                 } else {
                     None
@@ -108,9 +112,20 @@ impl Semantics {
                 Command::Source {
                     file_path: Some(file_path),
                     ..
-                } => self.find_definition_in(&PathBuf::from(file_path.text), identifier, None),
+                } => {
+                    let path = self.canonicalize_path(PathBuf::from(file_path.text));
+                    self.find_definition_in(&path, identifier, None)
+                }
                 _ => None,
             })
+    }
+
+    fn canonicalize_path(&self, path: PathBuf) -> PathBuf {
+        if path.is_relative() {
+            self.project_root.join(path)
+        } else {
+            path
+        }
     }
 }
 
@@ -238,18 +253,24 @@ source hello.gdb
 
 say_hi
         "#;
-        let script_1_path = PathBuf::from("foo.gdb");
+        let script_1_path = PathBuf::from("/home/user/foo.gdb");
         let script_2 = r#"
 define say_hi
     echo hi
 end
         "#;
-        let script_2_path = PathBuf::from("hello.gdb");
+        let script_2_path = PathBuf::from("/home/user/hello.gdb");
 
         let semantics = {
-            let fake_cwd: PathBuf = PathBuf::new();
+            // We use a non-empty CWD here to show that path canonicalization
+            // works.
+            let fake_cwd: PathBuf = PathBuf::from("/home/user");
             let mut semantics = Semantics::new(fake_cwd);
-            semantics.set_file_text(script_1_path.clone(), script_1.to_owned());
+            let unresolved_imports =
+                semantics.set_file_text(script_1_path.clone(), script_1.to_owned());
+            assert_eq!(1, unresolved_imports.len());
+            assert_eq!(&script_2_path, unresolved_imports.get(0).unwrap());
+
             semantics.set_file_text(script_2_path.clone(), script_2.to_owned());
 
             semantics
