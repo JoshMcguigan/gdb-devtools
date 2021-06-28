@@ -26,11 +26,30 @@ impl Semantics {
     /// external files which are not already loaded, those paths are returned
     /// as UnresolvedPaths.
     pub fn set_file_text(&mut self, path: PathBuf, text: String) -> UnresolvedPaths {
+        let unresolved_paths = parse(&text)
+            .into_iter()
+            .filter_map(|command| {
+                if let Command::Source {
+                    file_path: Some(file_path),
+                    ..
+                } = command
+                {
+                    let path = PathBuf::from(file_path.text);
+
+                    if self.files.contains_key(&path) {
+                        None
+                    } else {
+                        Some(PathBuf::from(file_path.text))
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         self.files.insert(path, text);
 
-        // TODO
-        // check for unresolved paths
-        vec![]
+        unresolved_paths
     }
 
     // TODO
@@ -249,5 +268,37 @@ end
         assert_eq!(script_2_path, definition.file);
         assert_eq!(1, definition.line);
         assert_eq!(7, definition.column);
+    }
+
+    #[test]
+    fn set_file_text_requests_unresolved_imports() {
+        let script_1 = r#"source bar.gdb"#;
+        let script_1_path = PathBuf::from("foo.gdb");
+
+        let script_2 = r#"echo hi from bar"#;
+        let script_2_path = PathBuf::from("bar.gdb");
+
+        let script_3 = r#"source bar.gdb"#;
+        let script_3_path = PathBuf::from("baz.gdb");
+
+        let mut semantics = {
+            let fake_cwd: PathBuf = PathBuf::new();
+            let semantics = Semantics::new(fake_cwd);
+
+            semantics
+        };
+
+        let unresolved_imports =
+            semantics.set_file_text(script_1_path.clone(), script_1.to_owned());
+        assert_eq!(1, unresolved_imports.len());
+        assert_eq!(&script_2_path, unresolved_imports.get(0).unwrap());
+
+        let unresolved_imports =
+            semantics.set_file_text(script_2_path.clone(), script_2.to_owned());
+        assert!(unresolved_imports.is_empty());
+
+        let unresolved_imports =
+            semantics.set_file_text(script_3_path.clone(), script_3.to_owned());
+        assert!(unresolved_imports.is_empty());
     }
 }
