@@ -4,7 +4,8 @@ use std::{env, error::Error, fs, path::PathBuf};
 
 use lsp_server::{Connection, Message, RequestId, Response};
 use lsp_types::{
-    notification, request, GotoDefinitionResponse, InitializeParams, OneOf, ServerCapabilities,
+    notification, request, CompletionItem, CompletionOptions, CompletionResponse,
+    GotoDefinitionResponse, InitializeParams, OneOf, ServerCapabilities,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 
@@ -18,6 +19,8 @@ fn main() -> Result<(), Box<dyn Error + Sync + Send>> {
         cap.definition_provider = Some(OneOf::Left(true));
 
         cap.text_document_sync = Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::Full));
+
+        cap.completion_provider = Some(CompletionOptions::default());
 
         serde_json::to_value(&cap).unwrap()
     };
@@ -48,49 +51,70 @@ fn main_loop(
                     return Ok(());
                 }
 
-                if let Ok((id, params)) = cast_request::<request::GotoDefinition>(req) {
-                    eprintln!("got GotoDefinition request #{}: {:?}", id, params);
-                    let result = match semantics.find_definition(FilePosition {
-                        file: &params
-                            .text_document_position_params
-                            .text_document
-                            .uri
-                            .to_file_path()
-                            .unwrap(),
-                        line: params.text_document_position_params.position.line as usize,
-                        column: params.text_document_position_params.position.character as usize,
-                    }) {
-                        Some(definition_position) => {
-                            let pos = lsp_types::Position {
-                                line: definition_position.line as u32,
-                                character: definition_position.column as u32,
-                            };
-                            // We are using an empty range here to indicate a specific
-                            // location.
-                            let range = lsp_types::Range {
-                                start: pos,
-                                end: pos,
-                            };
-                            let result =
-                                Some(GotoDefinitionResponse::from(lsp_types::Location::new(
-                                    lsp_types::Url::from_file_path(definition_position.file)
-                                        .unwrap(),
-                                    range,
-                                )));
-                            Some(serde_json::to_value(&result).unwrap())
-                        }
-                        None => None,
-                    };
-                    // TODO we must always return either a result or an error
-                    //
-                    // If we don't find the definition, is that supposed to be
-                    // represented as an empty result or as an error?
-                    let resp = Response {
-                        id,
-                        result,
-                        error: None,
-                    };
-                    connection.sender.send(Message::Response(resp))?;
+                let req = match cast_request::<request::GotoDefinition>(req) {
+                    Ok((id, params)) => {
+                        eprintln!("got GotoDefinition request #{}: {:?}", id, params);
+                        let result = match semantics.find_definition(FilePosition {
+                            file: &params
+                                .text_document_position_params
+                                .text_document
+                                .uri
+                                .to_file_path()
+                                .unwrap(),
+                            line: params.text_document_position_params.position.line as usize,
+                            column: params.text_document_position_params.position.character
+                                as usize,
+                        }) {
+                            Some(definition_position) => {
+                                let pos = lsp_types::Position {
+                                    line: definition_position.line as u32,
+                                    character: definition_position.column as u32,
+                                };
+                                // We are using an empty range here to indicate a specific
+                                // location.
+                                let range = lsp_types::Range {
+                                    start: pos,
+                                    end: pos,
+                                };
+                                let result =
+                                    Some(GotoDefinitionResponse::from(lsp_types::Location::new(
+                                        lsp_types::Url::from_file_path(definition_position.file)
+                                            .unwrap(),
+                                        range,
+                                    )));
+                                Some(serde_json::to_value(&result).unwrap())
+                            }
+                            None => None,
+                        };
+                        // TODO we must always return either a result or an error
+                        //
+                        // If we don't find the definition, is that supposed to be
+                        // represented as an empty result or as an error?
+                        let resp = Response {
+                            id,
+                            result,
+                            error: None,
+                        };
+                        connection.sender.send(Message::Response(resp))?;
+                        continue;
+                    }
+                    Err(req) => req,
+                };
+                let _req = match cast_request::<request::Completion>(req) {
+                    Ok((id, _params)) => {
+                        let response = CompletionResponse::Array(vec![CompletionItem::new_simple(
+                            "define".to_owned(),
+                            "define arg0".to_owned(),
+                        )]);
+                        let resp = Response {
+                            id,
+                            result: Some(serde_json::to_value(&response).unwrap()),
+                            error: None,
+                        };
+                        connection.sender.send(Message::Response(resp))?;
+                        continue;
+                    }
+                    Err(req) => req,
                 };
             }
             Message::Response(resp) => {
