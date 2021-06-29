@@ -96,19 +96,41 @@ fn main_loop(
             Message::Response(resp) => {
                 eprintln!("got response: {:?}", resp);
             }
-            Message::Notification(not) => {
-                eprintln!("got notification: {:#?}", not);
+            Message::Notification(notification) => {
+                eprintln!("got notification: {:#?}", notification);
 
-                if let Ok(params) = cast_notification::<notification::DidOpenTextDocument>(not) {
-                    eprintln!("got DidOpenTextDocument notification: {:?}", params);
-                    recursively_set_file_text(
-                        &mut semantics,
-                        // This unwrap fails if using file URIs which are not
-                        // file: scheme.
-                        params.text_document.uri.to_file_path().unwrap(),
-                        params.text_document.text,
-                    );
-                };
+                let notification =
+                    match cast_notification::<notification::DidOpenTextDocument>(notification) {
+                        Ok(params) => {
+                            eprintln!("got DidOpenTextDocument notification: {:?}", params);
+                            recursively_set_file_text(
+                                &mut semantics,
+                                // This unwrap fails if using file URIs which are not
+                                // file: scheme.
+                                params.text_document.uri.to_file_path().unwrap(),
+                                params.text_document.text,
+                            );
+                            continue;
+                        }
+                        Err(notification) => notification,
+                    };
+                let _notification =
+                    match cast_notification::<notification::DidChangeTextDocument>(notification) {
+                        Ok(mut params) => {
+                            eprintln!("got DidChangeTextDocument notification: {:?}", params);
+                            recursively_set_file_text(
+                                &mut semantics,
+                                // This unwrap fails if using file URIs which are not
+                                // file: scheme.
+                                params.text_document.uri.to_file_path().unwrap(),
+                                // We are assuming here that the client is sending the
+                                // full file, as this is how we initialize our config.
+                                params.content_changes.pop().unwrap().text,
+                            );
+                            continue;
+                        }
+                        Err(notification) => notification,
+                    };
             }
         }
     }
