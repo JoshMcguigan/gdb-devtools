@@ -21,7 +21,7 @@ pub(crate) struct CompletionPositionArg<'a> {
 impl<'a> CompletionPosition<'a> {
     pub(crate) fn new(script: &'a str, cursor_position: Location) -> Option<Self> {
         let line = parse::iters::lines(script)
-            .find(|line| dbg!(line).start_line_in_file == cursor_position.line)?;
+            .find(|line| line.start_line_in_file == cursor_position.line)?;
         let mut tokens_before_this = parse::iters::tokens(&line).take_while(|token| {
             token.location_in_file.column + token.text.len() < cursor_position.column
         });

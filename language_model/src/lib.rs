@@ -6,6 +6,7 @@ use std::{
 mod completions;
 
 mod parse;
+use completions::CompletionPosition;
 use parse::{parse, Command};
 
 pub struct Semantics {
@@ -61,18 +62,42 @@ impl Semantics {
     // TODO
     // this should return full CommandDefine struct, so we could impl
     // hover using it
-    pub fn find_definition(&self, item_position: CursorPosition) -> Option<CursorPosition> {
-        let script = self.files.get(item_position.file)?;
+    pub fn find_definition(&self, cursor_position: CursorPosition) -> Option<CursorPosition> {
+        let script = self.files.get(cursor_position.file)?;
 
         // Find the token at the requested position.
         let line = parse::iters::lines(script)
-            .find(|line| line.start_line_in_file == item_position.line)?;
+            .find(|line| line.start_line_in_file == cursor_position.line)?;
         let token =
-            parse::iters::tokens(&line).find(|token| token.is_at_location(item_position))?;
+            parse::iters::tokens(&line).find(|token| token.is_at_location(cursor_position))?;
         let identifier = token.text;
 
         // Find most recent definition of that token before the requested position.
-        self.find_definition_in(item_position.file, identifier, Some(item_position.line))
+        self.find_definition_in(cursor_position.file, identifier, Some(cursor_position.line))
+    }
+
+    pub fn find_completions(&self, cursor_position: CursorPosition) -> Vec<Completion> {
+        let script = match self.files.get(cursor_position.file) {
+            Some(script) => script,
+            None => return vec![],
+        };
+        let completion_position = match CompletionPosition::new(script, cursor_position.into()) {
+            Some(completion_position) => completion_position,
+            None => return vec![],
+        };
+
+        match completion_position {
+            // TODO factor this list out as const
+            // also consider user defined functions
+            CompletionPosition::Command => ["define", "if", "else", "end"]
+                .iter()
+                .map(|&command| Completion {
+                    text: command.to_owned(),
+                })
+                .collect(),
+            // TODO handle completions in arg position, including user defined variables
+            CompletionPosition::Arg(_) => vec![],
+        }
     }
 
     /// Find the definition of the given identifier in the given script, including
@@ -140,9 +165,16 @@ pub struct CursorPosition<'a> {
     pub column: usize,
 }
 
+#[derive(Debug)]
+pub struct Completion {
+    pub text: String,
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+
+    use expect_test::{expect, Expect};
 
     use super::{CursorPosition, Semantics};
 
@@ -323,5 +355,47 @@ end
         let unresolved_imports =
             semantics.set_file_text(script_3_path.clone(), script_3.to_owned());
         assert!(unresolved_imports.is_empty());
+    }
+
+    fn check_completions(script: &str, line: usize, column: usize, expect_parse: Expect) {
+        let script_path = PathBuf::from("foo.gdb");
+
+        let semantics = {
+            let fake_cwd: PathBuf = PathBuf::new();
+            let mut semantics = Semantics::new(fake_cwd);
+            semantics.set_file_text(script_path.clone(), script.to_owned());
+
+            semantics
+        };
+
+        let cursor_position = CursorPosition {
+            file: &script_path,
+            line,
+            column,
+        };
+
+        let completions = semantics.find_completions(cursor_position);
+
+        expect_parse.assert_eq(
+            &completions
+                .into_iter()
+                .map(|completion| completion.text)
+                .collect::<Vec<String>>()
+                .join("\n"),
+        );
+    }
+
+    #[test]
+    fn completions_empty_script() {
+        check_completions(
+            "",
+            0,
+            0,
+            expect![[r#"
+            define
+            if
+            else
+            end"#]],
+        );
     }
 }

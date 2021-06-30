@@ -101,14 +101,28 @@ fn main_loop(
                     Err(req) => req,
                 };
                 let _req = match cast_request::<request::Completion>(req) {
-                    Ok((id, _params)) => {
-                        let response = CompletionResponse::Array(vec![CompletionItem::new_simple(
-                            "define".to_owned(),
-                            "define arg0".to_owned(),
-                        )]);
+                    Ok((id, params)) => {
+                        let result = semantics
+                            .find_completions(CursorPosition {
+                                file: &params
+                                    .text_document_position
+                                    .text_document
+                                    .uri
+                                    .to_file_path()
+                                    .unwrap(),
+                                line: params.text_document_position.position.line as usize,
+                                column: params.text_document_position.position.character as usize,
+                            })
+                            .into_iter()
+                            .map(|completion| {
+                                CompletionItem::new_simple(completion.text, String::new())
+                            })
+                            .collect::<Vec<CompletionItem>>();
                         let resp = Response {
                             id,
-                            result: Some(serde_json::to_value(&response).unwrap()),
+                            result: Some(
+                                serde_json::to_value(&CompletionResponse::Array(result)).unwrap(),
+                            ),
                             error: None,
                         };
                         connection.sender.send(Message::Response(resp))?;
