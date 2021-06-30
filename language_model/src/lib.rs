@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod completions;
+
 mod parse;
 use parse::{parse, Command};
 

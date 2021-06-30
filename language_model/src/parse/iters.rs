@@ -26,7 +26,7 @@ pub(crate) fn lines(text: &str) -> impl Iterator<Item = CommandLine> {
         }
     }
 
-    if span_start < text.len() {
+    if span_start <= text.len() {
         let span = span_start..text.len();
         lines.push(CommandLine {
             text: &text[span.clone()],
@@ -245,6 +245,18 @@ command_with_one_arg \
                 ]
                 []
             "#]],
+        );
+    }
+
+    #[test]
+    fn lines_and_tokens_empty_script() {
+        let script = "";
+
+        check_lines_and_tokens(
+            script,
+            expect![[r#"
+            []
+        "#]],
         );
     }
 }

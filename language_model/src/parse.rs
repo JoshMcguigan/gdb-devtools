@@ -20,7 +20,7 @@ impl<'a> Token<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Location {
     pub line: usize,
     pub column: usize,
@@ -37,6 +37,7 @@ impl<'a> From<CursorPosition<'a>> for Location {
 
 /// Represents a single GDB command line, which is one or more
 /// lines in the script file.
+#[derive(Debug)]
 pub(crate) struct CommandLine<'a> {
     text: &'a str,
     /// The line in the file where this command line starts.
