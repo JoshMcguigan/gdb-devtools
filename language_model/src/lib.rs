@@ -4,10 +4,13 @@ use std::{
 };
 
 mod completions;
+use completions::CompletionPosition;
 
 mod parse;
-use completions::CompletionPosition;
 use parse::{parse, Command};
+
+#[cfg(test)]
+mod test_support;
 
 pub struct Semantics {
     /// All relative imports are assumed to be relative to the project root.

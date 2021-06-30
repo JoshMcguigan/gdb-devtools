@@ -20,7 +20,7 @@ impl<'a> Token<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Location {
     pub line: usize,
     pub column: usize,
