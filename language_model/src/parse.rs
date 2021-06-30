@@ -1,4 +1,4 @@
-use crate::FilePosition;
+use crate::CursorPosition;
 
 pub mod iters;
 
@@ -26,8 +26,8 @@ pub(crate) struct Location {
     pub column: usize,
 }
 
-impl<'a> From<FilePosition<'a>> for Location {
-    fn from(p: FilePosition) -> Self {
+impl<'a> From<CursorPosition<'a>> for Location {
+    fn from(p: CursorPosition) -> Self {
         Self {
             line: p.line,
             column: p.column,

@@ -1,4 +1,4 @@
-use language_model::{FilePosition, Semantics};
+use language_model::{CursorPosition, Semantics};
 
 use std::{env, error::Error, fs, path::PathBuf};
 
@@ -54,7 +54,7 @@ fn main_loop(
                 let req = match cast_request::<request::GotoDefinition>(req) {
                     Ok((id, params)) => {
                         eprintln!("got GotoDefinition request #{}: {:?}", id, params);
-                        let result = match semantics.find_definition(FilePosition {
+                        let result = match semantics.find_definition(CursorPosition {
                             file: &params
                                 .text_document_position_params
                                 .text_document

@@ -59,7 +59,7 @@ impl Semantics {
     // TODO
     // this should return full CommandDefine struct, so we could impl
     // hover using it
-    pub fn find_definition(&self, item_position: FilePosition) -> Option<FilePosition> {
+    pub fn find_definition(&self, item_position: CursorPosition) -> Option<CursorPosition> {
         let script = self.files.get(item_position.file)?;
 
         // Find the token at the requested position.
@@ -83,7 +83,7 @@ impl Semantics {
         script_path: &Path,
         identifier: &str,
         line_limit: Option<usize>,
-    ) -> Option<FilePosition> {
+    ) -> Option<CursorPosition> {
         let (file_path, script) = self.files.get_key_value(script_path)?;
         parse(script)
             .into_iter()
@@ -100,7 +100,7 @@ impl Semantics {
                                 return None;
                             }
                         }
-                        Some(FilePosition {
+                        Some(CursorPosition {
                             file: file_path,
                             line: defined_identifier.location_in_file.line,
                             column: defined_identifier.location_in_file.column,
@@ -132,7 +132,7 @@ impl Semantics {
 type UnresolvedPaths = Vec<PathBuf>;
 
 #[derive(Copy, Clone)]
-pub struct FilePosition<'a> {
+pub struct CursorPosition<'a> {
     pub file: &'a Path,
     pub line: usize,
     pub column: usize,
@@ -142,7 +142,7 @@ pub struct FilePosition<'a> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{FilePosition, Semantics};
+    use super::{CursorPosition, Semantics};
 
     #[test]
     fn find_definition_simple() {
@@ -163,7 +163,7 @@ say_hi
             semantics
         };
 
-        let item_position = FilePosition {
+        let item_position = CursorPosition {
             file: &script_path,
             line: 5,
             column: 0,
@@ -197,7 +197,7 @@ end
             semantics
         };
 
-        let item_position = FilePosition {
+        let item_position = CursorPosition {
             file: &script_path,
             line: 1,
             column: 0,
@@ -231,7 +231,7 @@ say_hi
             semantics
         };
 
-        let item_position = FilePosition {
+        let item_position = CursorPosition {
             file: &script_path,
             line: 9,
             column: 0,
@@ -276,7 +276,7 @@ end
             semantics
         };
 
-        let item_position = FilePosition {
+        let item_position = CursorPosition {
             file: &script_1_path,
             line: 3,
             column: 0,
