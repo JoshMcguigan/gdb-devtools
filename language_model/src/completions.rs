@@ -49,34 +49,35 @@ impl<'a> CompletionPosition<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CompletionPosition, Location};
+    use crate::test_support::parse_cursor_position;
+
+    use super::CompletionPosition;
 
     #[test]
     fn empty_script() {
-        let script = "";
-        let completion_position = CompletionPosition::new(script, Location { line: 0, column: 0 })
-            .expect("should resolve completion position");
+        let (script, location) = parse_cursor_position("<|>");
+        let completion_position =
+            CompletionPosition::new(&script, location).expect("should resolve completion position");
 
         assert_eq!(CompletionPosition::Command, completion_position);
     }
 
     #[test]
     fn if_cursor_on_command_it_is_not_included() {
-        let script = "def";
-        let completion_position = CompletionPosition::new(script, Location { line: 0, column: 2 })
-            .expect("should resolve completion position");
+        let (script, location) = parse_cursor_position("def<|>");
+        let completion_position =
+            CompletionPosition::new(&script, location).expect("should resolve completion position");
 
         assert_eq!(CompletionPosition::Command, completion_position);
     }
 
     #[test]
     fn first_and_only_arg() {
-        let script = "define  ";
-        let completion_position_arg =
-            CompletionPosition::new(script, Location { line: 0, column: 7 })
-                .expect("should resolve completion position")
-                .into_arg()
-                .expect("should resolve as arg");
+        let (script, location) = parse_cursor_position("define <|>");
+        let completion_position_arg = CompletionPosition::new(&script, location)
+            .expect("should resolve completion position")
+            .into_arg()
+            .expect("should resolve as arg");
 
         assert_eq!("define", completion_position_arg.command);
         assert!(completion_position_arg.leading_args.is_empty());
@@ -84,17 +85,11 @@ mod tests {
 
     #[test]
     fn last_arg() {
-        let script = "set max-completions  ";
-        let completion_position_arg = CompletionPosition::new(
-            script,
-            Location {
-                line: 0,
-                column: 20,
-            },
-        )
-        .expect("should resolve completion position")
-        .into_arg()
-        .expect("should resolve as arg");
+        let (script, location) = parse_cursor_position("set max-completions <|>");
+        let completion_position_arg = CompletionPosition::new(&script, location)
+            .expect("should resolve completion position")
+            .into_arg()
+            .expect("should resolve as arg");
 
         assert_eq!("set", completion_position_arg.command);
         assert_eq!(
@@ -105,12 +100,11 @@ mod tests {
 
     #[test]
     fn middle_arg() {
-        let script = "set   max-completions";
-        let completion_position_arg =
-            CompletionPosition::new(script, Location { line: 0, column: 4 })
-                .expect("should resolve completion position")
-                .into_arg()
-                .expect("should resolve as arg");
+        let (script, location) = parse_cursor_position("set <|> max-completions");
+        let completion_position_arg = CompletionPosition::new(&script, location)
+            .expect("should resolve completion position")
+            .into_arg()
+            .expect("should resolve as arg");
 
         assert_eq!("set", completion_position_arg.command);
         assert!(completion_position_arg.leading_args.is_empty());
@@ -118,12 +112,11 @@ mod tests {
 
     #[test]
     fn if_cursor_on_arg_it_is_not_included() {
-        let script = "set max-completions";
-        let completion_position_arg =
-            CompletionPosition::new(script, Location { line: 0, column: 5 })
-                .expect("should resolve completion position")
-                .into_arg()
-                .expect("should resolve as arg");
+        let (script, location) = parse_cursor_position("set max-completions<|>");
+        let completion_position_arg = CompletionPosition::new(&script, location)
+            .expect("should resolve completion position")
+            .into_arg()
+            .expect("should resolve as arg");
 
         assert_eq!("set", completion_position_arg.command);
         assert!(completion_position_arg.leading_args.is_empty());
