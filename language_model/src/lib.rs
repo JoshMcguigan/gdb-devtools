@@ -179,6 +179,8 @@ mod tests {
 
     use expect_test::{expect, Expect};
 
+    use crate::test_support::parse_cursor_position;
+
     use super::{CursorPosition, Semantics};
 
     #[test]
@@ -188,22 +190,23 @@ define say_hi
     echo hi
 end
 
-say_hi
+<|>say_hi
         "#;
+        let (script, location) = parse_cursor_position(script);
         let script_path = PathBuf::from("foo.gdb");
 
         let semantics = {
             let fake_cwd: PathBuf = PathBuf::new();
             let mut semantics = Semantics::new(fake_cwd);
-            semantics.set_file_text(script_path.clone(), script.to_owned());
+            semantics.set_file_text(script_path.clone(), script);
 
             semantics
         };
 
         let item_position = CursorPosition {
             file: &script_path,
-            line: 5,
-            column: 0,
+            line: location.line,
+            column: location.column,
         };
 
         let definition = semantics
@@ -218,26 +221,27 @@ say_hi
     #[test]
     fn find_definition_returns_none_if_def_is_after_identifier() {
         let script = r#"
-say_hi
+<|>say_hi
 
 define say_hi
     echo hi
 end
         "#;
+        let (script, location) = parse_cursor_position(script);
         let script_path = PathBuf::from("foo.gdb");
 
         let semantics = {
             let fake_cwd: PathBuf = PathBuf::new();
             let mut semantics = Semantics::new(fake_cwd);
-            semantics.set_file_text(script_path.clone(), script.to_owned());
+            semantics.set_file_text(script_path.clone(), script);
 
             semantics
         };
 
         let item_position = CursorPosition {
             file: &script_path,
-            line: 1,
-            column: 0,
+            line: location.line,
+            column: location.column,
         };
 
         let definition = semantics.find_definition(item_position);
@@ -256,22 +260,23 @@ define say_hi
     echo hi!!!
 end
 
-say_hi
+<|>say_hi
         "#;
+        let (script, location) = parse_cursor_position(script);
         let script_path = PathBuf::from("foo.gdb");
 
         let semantics = {
             let fake_cwd: PathBuf = PathBuf::new();
             let mut semantics = Semantics::new(fake_cwd);
-            semantics.set_file_text(script_path.clone(), script.to_owned());
+            semantics.set_file_text(script_path.clone(), script);
 
             semantics
         };
 
         let item_position = CursorPosition {
             file: &script_path,
-            line: 9,
-            column: 0,
+            line: location.line,
+            column: location.column,
         };
 
         let definition = semantics
@@ -288,8 +293,9 @@ say_hi
         let script_1 = r#"
 source hello.gdb
 
-say_hi
+<|>say_hi
         "#;
+        let (script_1, location) = parse_cursor_position(script_1);
         let script_1_path = PathBuf::from("/home/user/foo.gdb");
         let script_2 = r#"
 define say_hi
@@ -303,8 +309,7 @@ end
             // works.
             let fake_cwd: PathBuf = PathBuf::from("/home/user");
             let mut semantics = Semantics::new(fake_cwd);
-            let unresolved_imports =
-                semantics.set_file_text(script_1_path.clone(), script_1.to_owned());
+            let unresolved_imports = semantics.set_file_text(script_1_path.clone(), script_1);
             assert_eq!(1, unresolved_imports.len());
             assert_eq!(&script_2_path, unresolved_imports.get(0).unwrap());
 
@@ -315,8 +320,8 @@ end
 
         let item_position = CursorPosition {
             file: &script_1_path,
-            line: 3,
-            column: 0,
+            line: location.line,
+            column: location.column,
         };
 
         let definition = semantics
@@ -360,7 +365,9 @@ end
         assert!(unresolved_imports.is_empty());
     }
 
-    fn check_completions(script: &str, line: usize, column: usize, expect_parse: Expect) {
+    fn check_completions(script: &str, expect_parse: Expect) {
+        let (script, location) = parse_cursor_position(script);
+
         let script_path = PathBuf::from("foo.gdb");
 
         let semantics = {
@@ -373,8 +380,8 @@ end
 
         let cursor_position = CursorPosition {
             file: &script_path,
-            line,
-            column,
+            line: location.line,
+            column: location.column,
         };
 
         let completions = semantics.find_completions(cursor_position);
@@ -391,9 +398,7 @@ end
     #[test]
     fn completions_empty_script() {
         check_completions(
-            "",
-            0,
-            0,
+            "<|>",
             expect![[r#"
             define
             if
