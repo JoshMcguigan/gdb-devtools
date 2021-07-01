@@ -97,10 +97,20 @@ impl Semantics {
                         text: command.to_owned(),
                     })
                     .collect();
+                let user_provided = self
+                    .find_all_user_defined_commands(
+                        cursor_position.file,
+                        Some(cursor_position.line),
+                    )
+                    .iter()
+                    .map(|&command| Completion {
+                        text: command.to_owned(),
+                    })
+                    .collect();
 
                 Completions {
                     built_in,
-                    user_provided: vec![],
+                    user_provided,
                 }
             }
             // TODO handle completions in arg position, including user defined variables
@@ -153,6 +163,45 @@ impl Semantics {
                 }
                 _ => None,
             })
+    }
+
+    fn find_all_user_defined_commands(
+        &self,
+        script_path: &Path,
+        line_limit: Option<usize>,
+    ) -> Vec<&str> {
+        let script = match self.files.get(script_path) {
+            Some(script) => script,
+            None => return vec![],
+        };
+
+        parse(script)
+            .into_iter()
+            .rev()
+            .filter_map(|command| match command {
+                Command::Define {
+                    define: define_command,
+                    identifier: Some(defined_identifier),
+                    ..
+                } => {
+                    if let Some(line_limit) = line_limit {
+                        if define_command.location_in_file.line >= line_limit {
+                            return None;
+                        }
+                    }
+                    Some(defined_identifier.text)
+                }
+                Command::Source {
+                    file_path: Some(file_path),
+                    ..
+                } => {
+                    let path = self.canonicalize_path(PathBuf::from(file_path.text));
+                    // self.find_definition_in(&path, identifier, None)
+                    None
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     fn canonicalize_path(&self, path: PathBuf) -> PathBuf {
@@ -410,5 +459,19 @@ end
     #[test]
     fn completions_user_provided_empty_script() {
         check_completions_user_provided("<|>", expect![[r#""#]]);
+    }
+
+    #[test]
+    fn completions_user_provided_cursor_below_single_define() {
+        check_completions_user_provided(
+            r#"
+        define say_hi
+            echo hi
+        end
+
+        <|>
+            "#,
+            expect![[r#"say_hi"#]],
+        );
     }
 }
