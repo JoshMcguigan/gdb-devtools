@@ -79,27 +79,32 @@ impl Semantics {
         self.find_definition_in(cursor_position.file, identifier, Some(cursor_position.line))
     }
 
-    pub fn find_completions(&self, cursor_position: CursorPosition) -> Vec<Completion> {
+    pub fn find_completions(&self, cursor_position: CursorPosition) -> Completions {
         let script = match self.files.get(cursor_position.file) {
             Some(script) => script,
-            None => return vec![],
+            None => return Completions::default(),
         };
         let completion_position = match CompletionPosition::new(script, cursor_position.into()) {
             Some(completion_position) => completion_position,
-            None => return vec![],
+            None => return Completions::default(),
         };
 
         match completion_position {
-            // TODO factor this list out as const
-            // also consider user defined functions
-            CompletionPosition::Command => ["define", "if", "else", "end"]
-                .iter()
-                .map(|&command| Completion {
-                    text: command.to_owned(),
-                })
-                .collect(),
+            CompletionPosition::Command => {
+                let built_in = ["define", "if", "else", "end"]
+                    .iter()
+                    .map(|&command| Completion {
+                        text: command.to_owned(),
+                    })
+                    .collect();
+
+                Completions {
+                    built_in,
+                    user_provided: vec![],
+                }
+            }
             // TODO handle completions in arg position, including user defined variables
-            CompletionPosition::Arg(_) => vec![],
+            CompletionPosition::Arg(_) => Completions::default(),
         }
     }
 
@@ -171,6 +176,12 @@ pub struct CursorPosition<'a> {
 #[derive(Debug)]
 pub struct Completion {
     pub text: String,
+}
+
+#[derive(Default)]
+pub struct Completions {
+    pub built_in: Vec<Completion>,
+    pub user_provided: Vec<Completion>,
 }
 
 #[cfg(test)]
@@ -365,7 +376,7 @@ end
         assert!(unresolved_imports.is_empty());
     }
 
-    fn check_completions(script: &str, expect_parse: Expect) {
+    fn check_completions_user_provided(script: &str, expect_parse: Expect) {
         let (script, location) = parse_cursor_position(script);
 
         let script_path = PathBuf::from("foo.gdb");
@@ -388,6 +399,7 @@ end
 
         expect_parse.assert_eq(
             &completions
+                .user_provided
                 .into_iter()
                 .map(|completion| completion.text)
                 .collect::<Vec<String>>()
@@ -396,14 +408,7 @@ end
     }
 
     #[test]
-    fn completions_empty_script() {
-        check_completions(
-            "<|>",
-            expect![[r#"
-            define
-            if
-            else
-            end"#]],
-        );
+    fn completions_user_provided_empty_script() {
+        check_completions_user_provided("<|>", expect![[r#""#]]);
     }
 }

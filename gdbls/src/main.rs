@@ -102,18 +102,20 @@ fn main_loop(
                 };
                 let _req = match cast_request::<request::Completion>(req) {
                     Ok((id, params)) => {
-                        let result = semantics
-                            .find_completions(CursorPosition {
-                                file: &params
-                                    .text_document_position
-                                    .text_document
-                                    .uri
-                                    .to_file_path()
-                                    .unwrap(),
-                                line: params.text_document_position.position.line as usize,
-                                column: params.text_document_position.position.character as usize,
-                            })
+                        let completions = semantics.find_completions(CursorPosition {
+                            file: &params
+                                .text_document_position
+                                .text_document
+                                .uri
+                                .to_file_path()
+                                .unwrap(),
+                            line: params.text_document_position.position.line as usize,
+                            column: params.text_document_position.position.character as usize,
+                        });
+                        let result = completions
+                            .user_provided
                             .into_iter()
+                            .chain(completions.built_in.into_iter())
                             .map(|completion| {
                                 CompletionItem::new_simple(completion.text, String::new())
                             })
